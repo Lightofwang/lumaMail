@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Frontend build output
+dist/
+tsconfig.tsbuildinfo
+
+# Rust / Tauri build output
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Local tooling and notes
+.qoder/
+
+# One-off migration scripts
+_transform.js
+_write_store.js
+
+# Logs and OS noise
+*.log
+.DS_Store
+Thumbs.db

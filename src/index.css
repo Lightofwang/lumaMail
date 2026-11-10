@@ -1,0 +1,161 @@
+@import "tailwindcss";
+
+:root {
+  --font-size-body: 14px;
+}
+
+@theme {
+  /* Background colors */
+  --color-bg-primary: #FFFFFF;
+  --color-bg-sidebar: #F7F8FA;
+  --color-bg-hover: #F1F3F5;
+  --color-bg-selected: #EEF2FF;
+  --color-bg-unread: #EFF6FF;
+  --color-bg-accent-10: rgba(91, 91, 214, 0.1);
+
+  /* Text colors */
+  --color-text-primary: #111827;
+  --color-text-secondary: #4B5563;
+  --color-text-tertiary: #9CA3AF;
+
+  /* Border colors */
+  --color-border-default: #E9EAEE;
+  --color-border-focus: #5B5BD6;
+
+  /* Accent */
+  --color-accent: #5B5BD6;
+  --color-accent-hover: #4B4BC6;
+
+  /* Status colors */
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-error: #EF4444;
+  --color-info: #3B82F6;
+
+  /* Avatar gradients */
+  --color-avatar-1-from: #6366F1;
+  --color-avatar-1-to: #8B5CF6;
+  --color-avatar-2-from: #EC4899;
+  --color-avatar-2-to: #F43F5E;
+  --color-avatar-3-from: #14B8A6;
+  --color-avatar-3-to: #06B6D4;
+  --color-avatar-4-from: #F97316;
+  --color-avatar-4-to: #EAB308;
+  --color-avatar-5-from: #3B82F6;
+  --color-avatar-5-to: #6366F1;
+
+  /* Border radius */
+  --radius-card: 12px;
+  --radius-button: 8px;
+  --radius-tag: 999px;
+  --radius-sm: 6px;
+
+  /* Shadows */
+  --shadow-card: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
+  --shadow-dropdown: 0 4px 16px rgba(16,24,40,.08), 0 12px 40px rgba(16,24,40,.12);
+  --shadow-button: 0 1px 2px rgba(16,24,40,.06);
+
+  /* Font */
+  --font-sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+
+  /* Spacing */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+
+  /* Animation */
+  --ease-smooth: cubic-bezier(.2,0,0,1);
+}
+
+/* Base styles */
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--color-text-primary);
+  background: var(--color-bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-tertiary);
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* TipTap editor styles */
+.tiptap {
+  outline: none;
+  min-height: 120px;
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.tiptap p {
+  margin: 0 0 8px;
+}
+
+.tiptap ul, .tiptap ol {
+  padding-left: 24px;
+  margin: 0 0 8px;
+}
+
+.tiptap blockquote {
+  border-left: 3px solid var(--color-border-default);
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--color-text-secondary);
+}
+
+.tiptap a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+/* Focus ring */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Transition defaults */
+.transition-smooth {
+  transition: all 180ms var(--ease-smooth);
+}
