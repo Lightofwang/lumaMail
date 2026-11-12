@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import {
   Inbox, Star, Send, FileText, Archive, Trash2, Briefcase, User,
   Settings, ChevronDown, ChevronRight, PenSquare, Mail, Menu, UserPlus,
-  ShieldAlert, Folder as FolderIcon,
+  ShieldAlert, Folder as FolderIcon, Check,
 } from 'lucide-react';
 import { useMailStore } from '@/store/mailStore';
 import { getInitials } from '@/lib/utils';
@@ -40,42 +40,37 @@ export function Sidebar({ onManualToggle }: { onManualToggle?: () => void } = {}
 
   return (
     <motion.aside
-      animate={{ width: collapsed ? 72 : 248 }}
+      animate={{ width: collapsed ? 64 : 240 }}
       transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-      className="flex flex-col h-full bg-[var(--color-bg-sidebar)] border-r border-[var(--color-border-default)]"
+      className="flex h-full flex-shrink-0 flex-col overflow-hidden px-2"
     >
-      {/* Brand */}
-      <div className="flex items-center gap-3 px-4 h-14 border-b border-[var(--color-border-default)]">
+      {/* Brand：Logo 固定 28px，收起时只保留展开按钮 */}
+      <div className="flex h-14 flex-shrink-0 items-center gap-2.5 px-1">
         <button
           onClick={handleToggle}
-          className="p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] transition-smooth"
+          className="icon-btn"
           title={collapsed ? '展开侧栏' : '折叠侧栏'}
+          aria-label={collapsed ? '展开侧栏' : '折叠侧栏'}
         >
           <Menu size={18} />
         </button>
-        <div
-          className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#6366F1] to-[#8B5CF6] flex items-center justify-center flex-shrink-0"
-        >
-          <Mail size={16} className="text-white" />
-        </div>
         {!collapsed && (
-          <motion.span
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="font-semibold text-[var(--color-text-primary)] text-[15px] whitespace-nowrap"
-          >
-            Luma Mail
-          </motion.span>
+          <>
+            <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[8px] bg-[var(--color-accent)]">
+              <Mail size={15} className="text-white" strokeWidth={1.7} />
+            </div>
+            <span className="whitespace-nowrap text-[16px] font-semibold text-[var(--color-text-primary)]">
+              Luma Mail
+            </span>
+          </>
         )}
       </div>
 
       {/* Compose button */}
-      <div className="px-3 py-3">
+      <div className={collapsed ? 'flex justify-center py-2' : 'py-2'}>
         <button
           onClick={() => store.openCompose()}
-          className={`flex items-center gap-2 w-full rounded-[var(--radius-button)] bg-[var(--color-accent)] text-white font-medium transition-smooth hover:bg-[var(--color-accent-hover)] focus-ring ${
-            collapsed ? 'justify-center p-2.5' : 'px-4 py-2.5'
-          }`}
+          className={`btn btn-primary ${collapsed ? 'h-10 w-10 px-0' : 'h-10 w-full'}`}
           title="撰写邮件 (c)"
         >
           <PenSquare size={18} />
@@ -85,16 +80,16 @@ export function Sidebar({ onManualToggle }: { onManualToggle?: () => void } = {}
 
       {/* Account switcher / empty-state guidance */}
       {!collapsed && (
-        <div className="px-3 pb-2">
+        <div className="pb-2">
           {hasAccounts ? (
             <AccountSwitcher />
           ) : (
-            <div className="rounded-[var(--radius-card)] border border-dashed border-[var(--color-border-default)] bg-white/60 px-3 py-3 text-center">
-              <p className="text-sm font-medium text-[var(--color-text-primary)]">还没有账号</p>
-              <p className="text-[11px] text-[var(--color-text-tertiary)] mt-1">添加账号后开始收发邮件</p>
+            <div className="group-card px-3 py-3">
+              <p className="text-[13px] font-medium text-[var(--color-text-secondary)]">还没有账号</p>
+              <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">添加账号后开始收发邮件</p>
               <button
                 onClick={() => store.openAccountForm()}
-                className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-button)] border border-[var(--color-accent)] text-xs font-medium text-[var(--color-accent)] hover:bg-[var(--color-bg-accent-10)] transition-smooth focus-ring"
+                className="btn btn-secondary mt-2.5 h-8 w-full text-[13px]"
               >
                 <UserPlus size={14} />
                 添加账号
@@ -104,27 +99,25 @@ export function Sidebar({ onManualToggle }: { onManualToggle?: () => void } = {}
         </div>
       )}
       {collapsed && !hasAccounts && (
-        <div className="px-3 pb-2 flex justify-center">
+        <div className="flex justify-center pb-2">
           <button
             onClick={() => store.openAccountForm()}
-            className="w-9 h-9 rounded-full border border-dashed border-[var(--color-border-default)] flex items-center justify-center text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)] transition-smooth"
+            className="icon-btn h-9 w-9"
             title="添加账号"
+            aria-label="添加账号"
           >
             <UserPlus size={16} />
           </button>
         </div>
       )}
       {collapsed && currentAccount && (
-        <div className="px-3 pb-2 flex justify-center">
+        <div className="flex justify-center pb-2">
           <button
             onClick={() => {
               const otherAccount = store.accounts.find(a => a.id !== store.currentAccountId);
               if (otherAccount) store.setCurrentAccount(otherAccount.id);
             }}
-            className="w-9 h-9 rounded-full bg-gradient-to-br flex items-center justify-center text-white text-xs font-bold transition-smooth hover:scale-105"
-            style={{
-              backgroundImage: `linear-gradient(135deg, ${currentAccount.avatarColors[0]}, ${currentAccount.avatarColors[1]})`,
-            }}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-fill)] text-[11px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-fill-hover)]"
             title={`${currentAccount.name} (${currentAccount.email})`}
           >
             {getInitials(currentAccount.name)}
@@ -133,7 +126,7 @@ export function Sidebar({ onManualToggle }: { onManualToggle?: () => void } = {}
       )}
 
       {/* Folder list */}
-      <nav className="flex-1 overflow-y-auto px-2 py-1">
+      <nav className="flex-1 overflow-y-auto py-1">
         {mainFolders.map(folder => (
           <FolderItem
             key={folder.id}
@@ -146,12 +139,8 @@ export function Sidebar({ onManualToggle }: { onManualToggle?: () => void } = {}
 
         {customFolders.length > 0 && (
           <>
-            {!collapsed && (
-              <div className="px-3 pt-4 pb-1 text-xs font-medium text-[var(--color-text-tertiary)] uppercase tracking-wider">
-                文件夹
-              </div>
-            )}
-            {collapsed && <div className="my-2 mx-3 border-t border-[var(--color-border-default)]" />}
+            {!collapsed && <div className="section-caption px-2.5 pt-4 pb-1">文件夹</div>}
+            {collapsed && <div className="mx-2 my-2 h-px bg-[var(--color-border-default)]" />}
             {customFolders.map(folder => (
               <FolderItem
                 key={folder.id}
@@ -166,16 +155,16 @@ export function Sidebar({ onManualToggle }: { onManualToggle?: () => void } = {}
       </nav>
 
       {/* Settings */}
-      <div className="px-2 py-3 border-t border-[var(--color-border-default)]">
+      <div className="py-2">
         <button
           onClick={() => store.openSettings()}
-          className={`flex items-center gap-2 w-full rounded-[var(--radius-sm)] px-3 py-2 text-[var(--color-text-secondary)] transition-smooth hover:bg-[var(--color-bg-hover)] focus-ring ${
-            collapsed ? 'justify-center' : ''
+          className={`flex h-10 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-[14px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)] ${
+            collapsed ? 'justify-center px-0' : ''
           }`}
           title="设置"
         >
           <Settings size={18} />
-          {!collapsed && <span className="text-sm">设置</span>}
+          {!collapsed && <span>设置</span>}
         </button>
       </div>
     </motion.aside>
@@ -191,30 +180,32 @@ function FolderItem({ folder, isActive, collapsed, onClick }: {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-3 w-full rounded-[var(--radius-sm)] px-3 py-2 text-sm transition-smooth focus-ring ${
-        collapsed ? 'justify-center' : ''
+      className={`relative flex h-9 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-[14px] transition-colors ${
+        collapsed ? 'justify-center px-0' : ''
       } ${
         isActive
-          ? 'bg-[var(--color-bg-selected)] text-[var(--color-accent)] font-medium'
-          : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]'
+          ? 'bg-[var(--color-bg-selected)] font-medium text-[var(--color-text-primary)]'
+          : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]'
       }`}
       title={folder.name}
     >
-      <span className={isActive ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-tertiary)]'}>
+      <span className={isActive ? 'text-[var(--color-text-primary)]' : 'text-[rgba(0,0,0,0.55)]'}>
         {iconMap[folder.icon] || <Inbox size={18} />}
       </span>
       {!collapsed && (
         <>
-          <span className="flex-1 text-left truncate">{folder.name}</span>
+          <span className="flex-1 truncate text-left">{folder.name}</span>
           {folder.unreadCount > 0 && (
-            <span className="min-w-[20px] h-5 px-1.5 rounded-[var(--radius-tag)] bg-[var(--color-accent)] text-white text-xs flex items-center justify-center font-medium">
+            <span className="text-[12px] tabular-nums text-[var(--color-text-tertiary)]">
               {folder.unreadCount}
             </span>
           )}
         </>
       )}
       {collapsed && folder.unreadCount > 0 && (
-        <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[var(--color-accent)]" />
+        <span className="absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[rgba(0,0,0,0.06)] px-1 text-[10px] tabular-nums text-[var(--color-text-secondary)]">
+          {folder.unreadCount}
+        </span>
       )}
     </button>
   );
@@ -231,27 +222,26 @@ function AccountSwitcher() {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2.5 w-full rounded-[var(--radius-sm)] px-2 py-1.5 transition-smooth hover:bg-[var(--color-bg-hover)]"
+        className="flex w-full items-center gap-2.5 rounded-[10px] px-2 py-2 transition-colors hover:bg-[var(--color-bg-hover)]"
       >
-        <div
-          className="w-7 h-7 rounded-full bg-gradient-to-br flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-          style={{
-            backgroundImage: `linear-gradient(135deg, ${currentAccount.avatarColors[0]}, ${currentAccount.avatarColors[1]})`,
-          }}
-        >
+        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[var(--color-fill)] text-[11px] font-medium text-[var(--color-text-secondary)]">
           {getInitials(currentAccount.name)}
         </div>
-        <div className="flex-1 text-left min-w-0">
-          <div className="text-sm font-medium text-[var(--color-text-primary)] truncate">{currentAccount.name}</div>
-          <div className="text-xs text-[var(--color-text-tertiary)] truncate">{currentAccount.email}</div>
+        <div className="min-w-0 flex-1 text-left">
+          <div className="truncate text-[13px] text-[var(--color-text-primary)]">{currentAccount.name}</div>
+          <div className="truncate text-[12px] text-[var(--color-text-tertiary)]">{currentAccount.email}</div>
         </div>
-        {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} className="rotate-90" />}
+        {isOpen ? (
+          <ChevronDown size={14} className="flex-shrink-0 text-[var(--color-text-tertiary)]" />
+        ) : (
+          <ChevronRight size={14} className="flex-shrink-0 text-[var(--color-text-tertiary)]" />
+        )}
       </button>
 
       {isOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
-          <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-[var(--radius-card)] shadow-[var(--shadow-dropdown)] border border-[var(--color-border-default)] z-20 overflow-hidden">
+          <div className="menu-panel absolute top-full left-0 right-0 z-20 mt-1">
             {store.accounts.map(account => (
               <button
                 key={account.id}
@@ -259,21 +249,19 @@ function AccountSwitcher() {
                   store.setCurrentAccount(account.id);
                   setIsOpen(false);
                 }}
-                className={`flex items-center gap-2.5 w-full px-3 py-2.5 text-sm transition-smooth hover:bg-[var(--color-bg-hover)] ${
+                className={`flex h-10 w-full items-center gap-2 rounded-[8px] px-2 text-left text-[14px] transition-colors hover:bg-[var(--color-bg-hover)] ${
                   account.id === currentAccount.id ? 'bg-[var(--color-bg-selected)]' : ''
                 }`}
               >
-                <div
-                  className="w-7 h-7 rounded-full bg-gradient-to-br flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                  style={{
-                    backgroundImage: `linear-gradient(135deg, ${account.avatarColors[0]}, ${account.avatarColors[1]})`,
-                  }}
-                >
+                <span className="flex w-4 flex-shrink-0 justify-center text-[var(--color-text-primary)]">
+                  {account.id === currentAccount.id && <Check size={14} />}
+                </span>
+                <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[var(--color-fill)] text-[11px] font-medium text-[var(--color-text-secondary)]">
                   {getInitials(account.name)}
                 </div>
-                <div className="text-left min-w-0">
-                  <div className="font-medium text-[var(--color-text-primary)] truncate">{account.name}</div>
-                  <div className="text-xs text-[var(--color-text-tertiary)] truncate">{account.email}</div>
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] text-[var(--color-text-primary)]">{account.name}</div>
+                  <div className="truncate text-[11px] text-[var(--color-text-tertiary)]">{account.email}</div>
                 </div>
               </button>
             ))}

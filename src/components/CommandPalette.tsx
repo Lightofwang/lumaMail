@@ -178,49 +178,51 @@ export function CommandPalette() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/20 z-50"
+            transition={{ duration: 0.16 }}
+            className="dialog-overlay fixed inset-0 z-50"
             onClick={() => store.closeCommandPalette()}
           />
           <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: -8 }}
+            initial={{ opacity: 0, scale: 0.98, y: -6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: -8 }}
+            exit={{ opacity: 0, scale: 0.98, y: -6 }}
             transition={{ duration: 0.15, ease: [0.2, 0, 0, 1] }}
-            className="fixed top-[20%] left-1/2 -translate-x-1/2 w-[520px] max-h-[420px] bg-white rounded-[var(--radius-card)] shadow-[var(--shadow-dropdown)] border border-[var(--color-border-default)] z-50 overflow-hidden flex flex-col"
+            className="palette-card fixed top-[20%] left-1/2 z-50 flex max-h-[420px] -translate-x-1/2 flex-col overflow-hidden rounded-[16px] border border-[rgba(0,0,0,0.05)] bg-white shadow-[var(--shadow-pop)]"
             onKeyDown={handleKeyDown}
+            role="dialog"
+            aria-modal="true"
+            aria-label="命令面板"
           >
             {/* Search input */}
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--color-border-default)]">
-              <Search size={18} className="text-[var(--color-text-tertiary)] flex-shrink-0" />
+            <div className="flex items-center gap-3 border-b border-[rgba(0,0,0,0.06)] px-4 py-3">
+              <Search size={18} className="flex-shrink-0 text-[var(--color-text-tertiary)]" />
               <input
                 ref={inputRef}
                 type="text"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder="输入命令或搜索..."
-                className="flex-1 text-sm outline-none placeholder:text-[var(--color-text-tertiary)]"
+                placeholder="输入命令或搜索…"
+                className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-[var(--color-text-tertiary)]"
               />
-              <kbd className="px-1.5 py-0.5 rounded text-xs bg-[var(--color-bg-sidebar)] text-[var(--color-text-tertiary)] border border-[var(--color-border-default)]">
-                Esc
-              </kbd>
+              <kbd className="kbd">Esc</kbd>
             </div>
 
             {store.accounts.length === 0 && (
-              <div className="px-4 py-2 text-xs text-[var(--color-text-tertiary)] border-b border-[var(--color-border-default)] bg-[var(--color-bg-sidebar)]">
+              <div className="border-b border-[rgba(0,0,0,0.06)] bg-[var(--color-admin-card)] px-4 py-2 text-[12px] text-[var(--color-text-tertiary)]">
                 还没有账号，添加账号后可导航邮件。
               </div>
             )}
 
             {/* Results */}
-            <div className="flex-1 overflow-y-auto py-2">
+            <div className="flex-1 overflow-y-auto p-2">
               {filteredCommands.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-[var(--color-text-tertiary)]">
+                <div className="px-4 py-10 text-center text-[13px] text-[var(--color-text-tertiary)]">
                   未找到匹配的命令
                 </div>
               ) : (
                 Object.entries(groupedCommands).map(([category, cmds]) => (
                   <div key={category}>
-                    <div className="px-4 py-1.5 text-xs font-medium text-[var(--color-text-tertiary)] uppercase tracking-wider">
+                    <div className="px-2 pb-1 pt-3 text-[12px] text-[var(--color-text-tertiary)]">
                       {categoryLabels[category]}
                     </div>
                     {cmds.map(cmd => {
@@ -231,22 +233,18 @@ export function CommandPalette() {
                           key={cmd.id}
                           onClick={cmd.action}
                           onMouseEnter={() => setSelectedIndex(idx)}
-                          className={`flex items-center gap-3 w-full px-4 py-2 text-sm transition-smooth ${
+                          className={`flex h-10 w-full items-center gap-3 rounded-[10px] px-2.5 text-[14px] transition-[background-color,color] duration-150 ${
                             isSelected ? 'bg-[var(--color-bg-selected)]' : 'hover:bg-[var(--color-bg-hover)]'
                           }`}
                         >
-                          <span className={isSelected ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-tertiary)]'}>
+                          <span className={isSelected ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}>
                             {cmd.icon}
                           </span>
-                          <span className="flex-1 text-left text-[var(--color-text-primary)]">{cmd.label}</span>
+                          <span className="flex-1 truncate text-left text-[var(--color-text-primary)]">{cmd.label}</span>
                           {cmd.description && (
-                            <span className="text-xs text-[var(--color-text-tertiary)]">{cmd.description}</span>
+                            <span className="truncate text-[12px] text-[var(--color-text-tertiary)]">{cmd.description}</span>
                           )}
-                          {cmd.shortcut && (
-                            <kbd className="px-1.5 py-0.5 rounded text-xs bg-[var(--color-bg-sidebar)] text-[var(--color-text-tertiary)] border border-[var(--color-border-default)]">
-                              {cmd.shortcut}
-                            </kbd>
-                          )}
+                          {cmd.shortcut && <kbd className="kbd">{cmd.shortcut}</kbd>}
                         </button>
                       );
                     })}
@@ -256,11 +254,11 @@ export function CommandPalette() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between px-4 py-2 border-t border-[var(--color-border-default)] bg-[var(--color-bg-sidebar)]">
-              <div className="flex items-center gap-3 text-xs text-[var(--color-text-tertiary)]">
-                <span><kbd className="px-1 py-0.5 rounded bg-white border border-[var(--color-border-default)]">↑↓</kbd> 选择</span>
-                <span><kbd className="px-1 py-0.5 rounded bg-white border border-[var(--color-border-default)]">↵</kbd> 执行</span>
-                <span><kbd className="px-1 py-0.5 rounded bg-white border border-[var(--color-border-default)]">esc</kbd> 关闭</span>
+            <div className="flex items-center justify-between border-t border-[rgba(0,0,0,0.06)] px-4 py-2">
+              <div className="flex items-center gap-3 text-[12px] text-[var(--color-text-tertiary)]">
+                <span className="flex items-center gap-1"><kbd className="kbd">↑↓</kbd> 选择</span>
+                <span className="flex items-center gap-1"><kbd className="kbd">↵</kbd> 执行</span>
+                <span className="flex items-center gap-1"><kbd className="kbd">esc</kbd> 关闭</span>
               </div>
             </div>
           </motion.div>

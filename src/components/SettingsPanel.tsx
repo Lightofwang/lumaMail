@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Palette, Type, Users, Server, Shield, UserPlus, Trash2 } from 'lucide-react';
+import { X, Palette, PenLine, Users, Server, Shield, UserPlus, Trash2, Sun, Moon } from 'lucide-react';
 import { useMailStore } from '@/store/mailStore';
 import { providerLabel } from '@/lib/providers';
 import { DensityMode } from '@/types';
@@ -13,7 +13,7 @@ export function SettingsPanel() {
 
   const tabs = [
     { id: 'appearance' as const, label: '外观', icon: <Palette size={16} /> },
-    { id: 'signature' as const, label: '签名', icon: <Signature size={16} /> },
+    { id: 'signature' as const, label: '签名', icon: <PenLine size={16} /> },
     { id: 'accounts' as const, label: '账号', icon: <Users size={16} /> },
     { id: 'server' as const, label: '服务器', icon: <Server size={16} /> },
   ];
@@ -26,37 +26,36 @@ export function SettingsPanel() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/20 z-40"
+            transition={{ duration: 0.16 }}
+            className="dialog-overlay fixed inset-0 z-40"
             onClick={() => store.closeSettings()}
           />
           <motion.div
-            initial={{ opacity: 0, x: 20 }}
+            initial={{ opacity: 0, x: 6 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
+            exit={{ opacity: 0, x: 6 }}
             transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-            className="fixed top-0 right-0 bottom-0 w-[520px] bg-white shadow-[var(--shadow-dropdown)] border-l border-[var(--color-border-default)] z-50 flex flex-col"
+            className="settings-drawer fixed top-0 right-0 bottom-0 z-50 flex flex-col overflow-hidden rounded-l-[16px] bg-white shadow-[var(--shadow-pop)]"
+            role="dialog"
+            aria-modal="true"
+            aria-label="设置"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border-default)]">
-              <h2 className="text-base font-semibold text-[var(--color-text-primary)]">设置</h2>
-              <button
-                onClick={() => store.closeSettings()}
-                className="p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-hover)] transition-smooth"
-              >
+            <div className="flex h-[52px] flex-shrink-0 items-center justify-between px-6">
+              <h2 className="text-[17px] font-semibold text-[var(--color-text-primary)]">设置</h2>
+              <button onClick={() => store.closeSettings()} className="icon-btn" aria-label="关闭设置">
                 <X size={18} />
               </button>
             </div>
 
-            {/* Tabs */}
-            <div className="flex items-center gap-1 px-6 py-3 border-b border-[var(--color-border-default)]">
+            <div className="flex flex-shrink-0 items-center gap-1 px-6 pb-3">
               {tabs.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-tag)] text-sm font-medium transition-smooth ${
+                  className={`flex h-9 items-center gap-1.5 rounded-[10px] px-3 text-[14px] transition-[background-color,color] duration-150 ${
                     activeTab === tab.id
-                      ? 'bg-[var(--color-accent)] text-white'
-                      : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]'
+                      ? 'bg-[var(--color-bg-selected)] font-medium text-[var(--color-text-primary)]'
+                      : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]'
                   }`}
                 >
                   {tab.icon}
@@ -65,12 +64,13 @@ export function SettingsPanel() {
               ))}
             </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto px-6 py-4">
-              {activeTab === 'appearance' && <AppearanceSettings />}
-              {activeTab === 'signature' && <SignatureSettings />}
-              {activeTab === 'accounts' && <AccountSettings />}
-              {activeTab === 'server' && <ServerSettings />}
+            <div className="flex-1 overflow-y-auto">
+              <div className="mx-auto w-full max-w-[780px] px-8 pb-[72px] pt-6">
+                {activeTab === 'appearance' && <AppearanceSettings />}
+                {activeTab === 'signature' && <SignatureSettings />}
+                {activeTab === 'accounts' && <AccountSettings />}
+                {activeTab === 'server' && <ServerSettings />}
+              </div>
             </div>
           </motion.div>
         </>
@@ -79,76 +79,121 @@ export function SettingsPanel() {
   );
 }
 
+function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="mb-7">
+      <h3 className="section-caption mb-2 px-1">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function SettingsRow({ label, hint, children, last }: {
+  label: string;
+  hint?: string;
+  children?: React.ReactNode;
+  last?: boolean;
+}) {
+  return (
+    <div
+      className={`flex min-h-[52px] items-center justify-between gap-4 px-4 py-2.5 ${
+        last ? '' : 'border-b border-[rgba(0,0,0,0.06)]'
+      }`}
+    >
+      <div className="min-w-0">
+        <div className="text-[14px] text-[var(--color-text-primary)]">{label}</div>
+        {hint && <div className="mt-0.5 text-[12px] leading-relaxed text-[var(--color-text-tertiary)]">{hint}</div>}
+      </div>
+      {children && <div className="flex flex-shrink-0 items-center gap-2">{children}</div>}
+    </div>
+  );
+}
+
 function AppearanceSettings() {
   const store = useMailStore();
 
   return (
-    <div className="space-y-6">
-      <div>
-        <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">列表密度</label>
-        <div className="flex gap-2">
-          {(['comfortable', 'compact'] as DensityMode[]).map(mode => (
+    <div>
+      <SettingsSection title="显示">
+        <div className="group-card overflow-hidden">
+          <SettingsRow label="列表密度" hint="影响邮件列表的行高">
+            <div className="flex gap-1 rounded-[10px] bg-[rgba(0,0,0,0.04)] p-1">
+              {(['comfortable', 'compact'] as DensityMode[]).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => store.setDensity(mode)}
+                  className={`h-7 rounded-[8px] px-3 text-[13px] transition-[background-color,color] duration-150 ${
+                    store.settings.density === mode
+                      ? 'bg-white font-medium text-[var(--color-text-primary)]'
+                      : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                  }`}
+                >
+                  {mode === 'comfortable' ? '舒适' : '紧凑'}
+                </button>
+              ))}
+            </div>
+          </SettingsRow>
+
+          <div className="border-b border-[rgba(0,0,0,0.06)] px-4 py-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[14px] text-[var(--color-text-primary)]">正文字号</span>
+              <span className="text-[13px] text-[var(--color-text-tertiary)]">{store.settings.fontSize}px</span>
+            </div>
+            <input
+              type="range"
+              min={12}
+              max={18}
+              step={1}
+              value={store.settings.fontSize}
+              onChange={e => store.setFontSize(Number(e.target.value))}
+              aria-label="正文字号"
+            />
+            <div className="mt-1 flex justify-between text-[12px] text-[var(--color-text-tertiary)]">
+              <span>12px</span>
+              <span>18px</span>
+            </div>
+          </div>
+
+          <SettingsRow label="主题" last>
+            <div className="flex gap-1 rounded-[10px] bg-[rgba(0,0,0,0.04)] p-1">
+              <span className="flex h-7 items-center gap-1.5 rounded-[8px] bg-white px-3 text-[13px] font-medium text-[var(--color-text-primary)]">
+                <Sun size={14} />
+                浅色
+              </span>
+              <span className="flex h-7 cursor-not-allowed items-center gap-1.5 px-3 text-[13px] text-[var(--color-text-tertiary)] opacity-60">
+                <Moon size={14} />
+                深色
+              </span>
+            </div>
+          </SettingsRow>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title="本地数据">
+        <div className="group-card overflow-hidden">
+          <SettingsRow label="清空本地数据" hint="账号配置、系统凭据中的密码、草稿与界面偏好都会被删除" last>
             <button
-              key={mode}
-              onClick={() => store.setDensity(mode)}
-              className={`flex-1 px-4 py-2.5 rounded-[var(--radius-button)] border text-sm font-medium transition-smooth ${
-                store.settings.density === mode
-                  ? 'border-[var(--color-accent)] bg-[var(--color-bg-accent-10)] text-[var(--color-accent)]'
-                  : 'border-[var(--color-border-default)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]'
-              }`}
+              onClick={() =>
+                void store.requestConfirm({
+                  title: '清空本地数据',
+                  message:
+                    '清空后，已配置的账号、系统凭据管理器中的密码、本地草稿与偏好都会被删除，应用回到空邮箱状态；服务器上的邮件不受影响。',
+                  okText: '清空',
+                  pendingText: '清空中…',
+                  danger: true,
+                  action: () => store.clearLocalData(),
+                })
+              }
+              className="btn btn-danger-text"
             >
-              {mode === 'comfortable' ? '舒适 (56px)' : '紧凑 (44px)'}
+              清空本地数据
             </button>
-          ))}
+          </SettingsRow>
         </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-          正文字号：{store.settings.fontSize}px
-        </label>
-        <input
-          type="range"
-          min={12}
-          max={18}
-          step={1}
-          value={store.settings.fontSize}
-          onChange={e => store.setFontSize(Number(e.target.value))}
-          className="w-full accent-[var(--color-accent)]"
-        />
-        <div className="flex justify-between text-xs text-[var(--color-text-tertiary)] mt-1">
-          <span>12px</span>
-          <span>18px</span>
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">主题</label>
-        <div className="flex gap-2">
-          <div className="flex-1 px-4 py-2.5 rounded-[var(--radius-button)] border-2 border-[var(--color-accent)] bg-[var(--color-bg-accent-10)] text-sm font-medium text-[var(--color-accent)]">
-            ☀️ 浅色
-          </div>
-          <div className="flex-1 px-4 py-2.5 rounded-[var(--radius-button)] border border-[var(--color-border-default)] text-sm font-medium text-[var(--color-text-tertiary)] cursor-not-allowed opacity-50">
-            🌙 深色（即将推出）
-          </div>
-        </div>
-      </div>
-
-      <div className="pt-4 border-t border-[var(--color-border-default)]">
-        <button
-          onClick={() => {
-            if (confirm('确定要清空本地数据吗？已配置的账号、系统凭据管理器中的密码、本地草稿与偏好都会被删除，应用将回到空邮箱状态。')) {
-              void store.clearLocalData();
-            }
-          }}
-          className="w-full px-4 py-2.5 rounded-[var(--radius-button)] border border-[var(--color-danger,#dc2626)] text-sm font-medium text-[var(--color-danger,#dc2626)] hover:bg-[var(--color-danger,#dc2626)]/5 transition-smooth"
-        >
-          清空本地数据
-        </button>
-        <p className="text-xs text-[var(--color-text-tertiary)] mt-2">
-          删除已保存的账号配置、系统凭据管理器中的密码、本地草稿与界面偏好。服务器上的邮件不会被删除。
+        <p className="mt-2 px-1 text-[12px] leading-relaxed text-[var(--color-text-tertiary)]">
+          只删除本机保存的配置与凭据，不会影响邮箱服务器上的邮件。
         </p>
-      </div>
+      </SettingsSection>
     </div>
   );
 }
@@ -160,35 +205,43 @@ function SignatureSettings() {
 
   if (!currentAccount) {
     return (
-      <div className="space-y-4">
-        <SettingsEmptyState
-          title="还没有账号"
-          description="添加账号后即可设置邮件签名。"
-          onAdd={() => store.openAccountForm()}
-        />
-      </div>
+      <SettingsEmptyState
+        title="还没有账号"
+        description="添加账号后即可设置邮件签名。"
+        onAdd={() => store.openAccountForm()}
+      />
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-          当前账号：{currentAccount.name} ({currentAccount.email})
-        </label>
-        <textarea
-          value={signature}
-          onChange={e => setSignature(e.target.value)}
-          rows={6}
-          className="w-full px-3 py-2 rounded-[var(--radius-button)] border border-[var(--color-border-default)] text-sm resize-none outline-none focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-bg-accent-10)] transition-smooth"
-          placeholder="输入你的邮件签名..."
-        />
-      </div>
+    <div>
+      <SettingsSection title="邮件签名">
+        <div className="group-card overflow-hidden">
+          <div className="border-b border-[rgba(0,0,0,0.06)] px-4 py-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[14px] text-[var(--color-text-primary)]">{currentAccount.name}</span>
+              <span className="truncate text-[12px] text-[var(--color-text-tertiary)]">{currentAccount.email}</span>
+            </div>
+          </div>
+          <div className="p-4">
+            <textarea
+              value={signature}
+              onChange={e => setSignature(e.target.value)}
+              rows={6}
+              className="input input-on-card w-full resize-none"
+              placeholder="输入你的邮件签名…"
+            />
+          </div>
+        </div>
+        <p className="mt-2 px-1 text-[12px] leading-relaxed text-[var(--color-text-tertiary)]">
+          签名保存将在后续版本接入，目前不会写入服务器。
+        </p>
+      </SettingsSection>
       <button
         onClick={() => {
           store.addToast({ message: '签名保存将在后续版本接入，目前不会写入服务器', type: 'info' });
         }}
-        className="px-4 py-2 rounded-[var(--radius-button)] bg-[var(--color-accent)] text-white text-sm font-medium hover:bg-[var(--color-accent-hover)] transition-smooth"
+        className="btn btn-primary"
       >
         保存签名
       </button>
@@ -198,75 +251,69 @@ function SignatureSettings() {
 
 function AccountSettings() {
   const store = useMailStore();
-  const [removingId, setRemovingId] = useState<string | null>(null);
 
-  const handleRemove = async (accountId: string, email: string) => {
-    if (!confirm(`确定要删除账号 ${email} 吗？对应的服务器密码/授权码也会从系统凭据管理器移除，本地邮件缓存将被清空。`)) {
-      return;
-    }
-    setRemovingId(accountId);
-    try {
-      await store.removeAccount(accountId);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '删除账号失败，请稍后重试';
-      store.addToast({ message, type: 'error' });
-    } finally {
-      setRemovingId(null);
-    }
+  const handleRemove = (accountId: string, email: string) => {
+    void store.requestConfirm({
+      title: '删除账号',
+      message: `删除后，账号 ${email} 对应的服务器密码/授权码会从系统凭据管理器移除，本地邮件缓存也会被清空。`,
+      okText: '删除账号',
+      pendingText: '删除中…',
+      danger: true,
+      action: () => store.removeAccount(accountId),
+    });
   };
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-[var(--color-text-secondary)]">管理你的邮箱账号</p>
-      {store.accounts.length === 0 && (
-        <SettingsEmptyState
-          title="还没有账号"
-          description="添加账号后开始收发邮件。"
-          onAdd={() => store.openAccountForm()}
-        />
-      )}
-      {store.accounts.map(account => (
-        <div
-          key={account.id}
-          className={`flex items-center gap-3 p-4 rounded-[var(--radius-card)] border transition-smooth ${
-            account.id === store.currentAccountId
-              ? 'border-[var(--color-accent)] bg-[var(--color-bg-accent-10)]'
-              : 'border-[var(--color-border-default)] hover:bg-[var(--color-bg-hover)]'
-          }`}
-        >
-          <div
-            className="w-10 h-10 rounded-full bg-gradient-to-br flex items-center justify-center text-white font-bold flex-shrink-0"
-            style={{
-              backgroundImage: `linear-gradient(135deg, ${account.avatarColors[0]}, ${account.avatarColors[1]})`,
-            }}
-          >
-            {account.name[0]}
+    <div>
+      <SettingsSection title="邮箱账号">
+        {store.accounts.length === 0 ? (
+          <SettingsEmptyState
+            title="还没有账号"
+            description="添加账号后开始收发邮件。"
+            onAdd={() => store.openAccountForm()}
+          />
+        ) : (
+          <div className="group-card overflow-hidden">
+            {store.accounts.map((account, index) => (
+              <div
+                key={account.id}
+                className={`flex min-h-[60px] items-center gap-3 px-4 py-2.5 ${
+                  index === store.accounts.length - 1 ? '' : 'border-b border-[rgba(0,0,0,0.06)]'
+                }`}
+              >
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[var(--color-fill)] text-[14px] font-semibold text-[var(--color-text-secondary)]">
+                  {(account.name[0] ?? account.email[0] ?? '?').toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[14px] text-[var(--color-text-primary)]">{account.name}</span>
+                    {account.id === store.currentAccountId && <span className="badge">当前</span>}
+                  </div>
+                  <div className="truncate text-[12px] text-[var(--color-text-tertiary)]">{account.email}</div>
+                </div>
+                <span className="hidden text-[12px] text-[var(--color-text-tertiary)] sm:inline">
+                  {providerLabel(account.provider)}
+                </span>
+                <button
+                  onClick={() => handleRemove(account.id, account.email)}
+                  className="btn btn-danger-text h-8 px-2"
+                  title="删除账号"
+                >
+                  <Trash2 size={15} />
+                  <span className="hidden sm:inline">删除</span>
+                </button>
+              </div>
+            ))}
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-[var(--color-text-primary)] text-left">{account.name}</div>
-            <div className="text-xs text-[var(--color-text-tertiary)] truncate text-left">{account.email}</div>
-          </div>
-          <div className="text-xs text-[var(--color-text-tertiary)]">{providerLabel(account.provider)}</div>
-          {account.id === store.currentAccountId && (
-            <span className="text-xs font-medium text-[var(--color-accent)]">当前</span>
-          )}
-          <button
-            onClick={() => void handleRemove(account.id, account.email)}
-            disabled={removingId === account.id}
-            className="p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-danger,#dc2626)] transition-smooth disabled:opacity-40"
-            title="删除账号"
-          >
-            <Trash2 size={15} />
-          </button>
-        </div>
-      ))}
-      <button
-        onClick={() => store.openAccountForm()}
-        className="w-full px-4 py-2.5 rounded-[var(--radius-button)] border border-dashed border-[var(--color-border-default)] text-sm text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-smooth"
-      >
-        + 添加账号
+        )}
+      </SettingsSection>
+
+      <button onClick={() => store.openAccountForm()} className="btn btn-secondary h-10 w-full">
+        <UserPlus size={16} />
+        添加账号
       </button>
-      <p className="text-xs text-[var(--color-text-tertiary)]">
+
+      <p className="mt-3 px-1 text-[12px] leading-relaxed text-[var(--color-text-tertiary)]">
         密码/授权码只保存在系统凭据管理器（Windows 凭据管理器 / macOS 钥匙串），不会写入配置文件或浏览器存储。
       </p>
     </div>
@@ -279,97 +326,60 @@ function ServerSettings() {
 
   if (!currentAccount) {
     return (
-      <div className="space-y-6">
-        <SettingsEmptyState
-          title="还没有账号"
-          description="添加账号后可查看 IMAP / SMTP 服务器配置。"
-          onAdd={() => store.openAccountForm()}
-        />
-      </div>
+      <SettingsEmptyState
+        title="还没有账号"
+        description="添加账号后可查看 IMAP / SMTP 服务器配置。"
+        onAdd={() => store.openAccountForm()}
+      />
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2 px-3 py-2 rounded-[var(--radius-button)] bg-[var(--color-bg-accent-10)] border border-[var(--color-accent)]/20">
-        <Shield size={16} className="text-[var(--color-accent)]" />
-        <span className="text-xs text-[var(--color-text-secondary)] font-medium">
-          {providerLabel(currentAccount.provider)} · 强制加密连接
-        </span>
-      </div>
-
-      <div>
-        <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-3">IMAP 收件服务器</h3>
-        <div className="space-y-3">
-          <SettingsField label="服务器地址" value={currentAccount.imap.host} readOnly />
-          <SettingsField label="端口" value={String(currentAccount.imap.port)} readOnly />
-          <SettingsField label="加密方式" value="SSL/TLS" readOnly />
-          <SettingsField label="用户名" value={currentAccount.username} readOnly />
+    <div>
+      <SettingsSection title="服务器">
+        <div className="notice notice-neutral mb-3 flex items-center gap-2">
+          <Shield size={16} className="flex-shrink-0" />
+          <span className="text-[13px]">
+            {providerLabel(currentAccount.provider)} · 强制加密连接
+          </span>
         </div>
-      </div>
 
-      <div>
-        <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-3">SMTP 发件服务器</h3>
-        <div className="space-y-3">
-          <SettingsField label="服务器地址" value={currentAccount.smtp.host} readOnly />
-          <SettingsField label="端口" value={String(currentAccount.smtp.port)} readOnly />
-          <SettingsField
-            label="加密方式"
-            value={currentAccount.smtp.security === 'starttls' ? 'STARTTLS' : 'SSL/TLS'}
-            readOnly
-          />
-          <SettingsField label="用户名" value={currentAccount.username} readOnly />
+        <div className="group-card overflow-hidden">
+          <SettingsRow label="IMAP 收件服务器" hint="SSL/TLS">
+            <span className="text-[13px] text-[var(--color-text-secondary)]">
+              {currentAccount.imap.host}:{currentAccount.imap.port}
+            </span>
+          </SettingsRow>
+          <SettingsRow label="SMTP 发件服务器" hint={currentAccount.smtp.security === 'starttls' ? 'STARTTLS' : 'SSL/TLS'}>
+            <span className="text-[13px] text-[var(--color-text-secondary)]">
+              {currentAccount.smtp.host}:{currentAccount.smtp.port}
+            </span>
+          </SettingsRow>
+          <SettingsRow label="登录用户名" last>
+            <span className="truncate text-[13px] text-[var(--color-text-secondary)]">{currentAccount.username}</span>
+          </SettingsRow>
         </div>
-      </div>
-
-      <p className="text-xs text-[var(--color-text-tertiary)]">
-        密码/授权码保存在系统凭据管理器中，应用不会在此显示或写入配置文件。当前版本使用密码/授权码登录，暂不支持 OAuth。
-      </p>
+        <p className="mt-2 px-1 text-[12px] leading-relaxed text-[var(--color-text-tertiary)]">
+          密码/授权码保存在系统凭据管理器中，应用不会在此显示或写入配置文件。当前版本使用密码/授权码登录，暂不支持 OAuth。
+        </p>
+      </SettingsSection>
     </div>
   );
 }
 
 function SettingsEmptyState({ title, description, onAdd }: {
-  title: string; description: string; onAdd: () => void;
+  title: string;
+  description: string;
+  onAdd: () => void;
 }) {
   return (
-    <div className="rounded-[var(--radius-card)] border border-dashed border-[var(--color-border-default)] bg-[var(--color-bg-sidebar)] px-4 py-6 text-center">
-      <p className="text-sm font-medium text-[var(--color-text-primary)]">{title}</p>
-      <p className="text-xs text-[var(--color-text-tertiary)] mt-1">{description}</p>
-      <button
-        onClick={onAdd}
-        className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--radius-button)] bg-[var(--color-accent)] text-white text-sm font-medium hover:bg-[var(--color-accent-hover)] transition-smooth focus-ring"
-      >
-        <UserPlus size={15} />
+    <div className="group-card px-6 py-10 text-center">
+      <p className="text-[14px] font-medium text-[var(--color-text-primary)]">{title}</p>
+      <p className="mt-1 text-[13px] text-[var(--color-text-tertiary)]">{description}</p>
+      <button onClick={onAdd} className="btn btn-primary mt-4">
+        <UserPlus size={16} />
         添加账号
       </button>
     </div>
-  );
-}
-
-function SettingsField({ label, value, readOnly }: { label: string; value: string; readOnly?: boolean }) {
-  return (
-    <div>
-      <label className="block text-xs text-[var(--color-text-tertiary)] mb-1">{label}</label>
-      <input
-        type="text"
-        value={value}
-        readOnly={readOnly}
-        className={`w-full px-3 py-2 rounded-[var(--radius-button)] border text-sm outline-none transition-smooth ${
-          readOnly
-            ? 'bg-[var(--color-bg-sidebar)] border-[var(--color-border-default)] text-[var(--color-text-secondary)]'
-            : 'border-[var(--color-border-default)] focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-bg-accent-10)]'
-        }`}
-      />
-    </div>
-  );
-}
-
-// Signature icon since lucide doesn't have one
-function Signature({ size }: { size: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 17h4l3-8 4 16 3-8h4" />
-    </svg>
   );
 }

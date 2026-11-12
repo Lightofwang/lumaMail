@@ -9,10 +9,11 @@ import { ComposeModal } from '@/components/ComposeModal';
 import { CommandPalette } from '@/components/CommandPalette';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { AccountSetupModal } from '@/components/AccountSetupModal';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ToastContainer } from '@/components/Toast';
 import { SkeletonLoader } from '@/components/SkeletonLoader';
-import { motion, AnimatePresence } from 'motion/react';
-import { X, Menu } from 'lucide-react';
+import { motion, AnimatePresence, MotionConfig } from 'motion/react';
+import { X } from 'lucide-react';
 
 export function App() {
   const store = useMailStore();
@@ -28,6 +29,15 @@ export function App() {
     void useMailStore.getState().bootstrap();
   }, []);
 
+  // On first mount at a narrow width, keep the list usable by collapsing the sidebar.
+  // 自动折叠只改内存状态，不写 localStorage；只有用户手动折叠才持久化。
+  useEffect(() => {
+    const state = useMailStore.getState();
+    if (windowWidth < 900 && !state.sidebarCollapsed) {
+      useMailStore.setState({ sidebarCollapsed: true });
+    }
+  }, []);
+
   // Responsive: auto-collapse/expand sidebar on width threshold crossing
   useEffect(() => {
     const prevWidth = prevWidthRef.current;
@@ -40,13 +50,14 @@ export function App() {
       userToggledRef.current = false;
     }
 
-    // Only auto-collapse when crossing from >=900 to <900, and user hasn't manually toggled
+    // Only auto-collapse when crossing from >=900 to <900, and user hasn't manually toggled.
+    // 这两处同样只改内存状态，避免把自动布局写入偏好。
     if (wasWide && isNarrow && !store.sidebarCollapsed && !userToggledRef.current) {
-      store.toggleSidebar();
+      useMailStore.setState({ sidebarCollapsed: true });
     }
     // Auto-expand when crossing from <900 to >=900
     else if (!wasWide && isWide && store.sidebarCollapsed && !userToggledRef.current) {
-      store.toggleSidebar();
+      useMailStore.setState({ sidebarCollapsed: false });
     }
 
     prevWidthRef.current = windowWidth;
@@ -68,42 +79,53 @@ export function App() {
   const showReadingOverlay = isNarrow && store.selectedThreadId;
 
   if (!store.isInitialized) {
-    return <SkeletonLoader />;
+    return (
+      <MotionConfig reducedMotion="user">
+        <SkeletonLoader />
+      </MotionConfig>
+    );
   }
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-white">
-      {/* Sidebar */}
-      <Sidebar onManualToggle={handleManualToggle} />
+    <MotionConfig reducedMotion="user">
+      <div className="flex h-full w-full overflow-hidden bg-[var(--color-ground)] text-[var(--color-text-primary)]">
+        {/* Sidebar — 与页面底色同色，不加边框 */}
+        <Sidebar onManualToggle={handleManualToggle} />
 
-      {/* Mail list */}
-      <div className="w-[360px] flex-shrink-0 h-full overflow-hidden">
-        <MailList />
-      </div>
+        {/* 主卡片：列表 + 阅读区共用一圈极淡描边 */}
+        <main className="m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-[12px] border border-[rgba(0,0,0,0.05)] bg-white">
+          <div className="mail-list-pane">
+            <MailList />
+          </div>
 
-      {/* Reading panel */}
-      {isNarrow ? (
+          {!isNarrow && <ReadingPanel />}
+        </main>
+
+        {/* 窄屏阅读浮层：白卡 + 纯黑遮罩，不套大阴影 */}
         <AnimatePresence>
-          {showReadingOverlay && (
+          {isNarrow && showReadingOverlay && (
             <>
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/20 z-30"
+                transition={{ duration: 0.16 }}
+                className="fixed inset-0 z-30 bg-[rgba(0,0,0,0.32)]"
                 onClick={() => store.selectThread(null)}
               />
               <motion.div
-                initial={{ x: '100%' }}
-                animate={{ x: 0 }}
-                exit={{ x: '100%' }}
+                initial={{ opacity: 0, x: 6 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 6 }}
                 transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-                className="fixed top-0 right-0 bottom-0 w-full max-w-[680px] z-40 bg-white shadow-[var(--shadow-dropdown)]"
+                className="reading-overlay fixed top-2 right-2 bottom-2 z-40 flex flex-col overflow-hidden rounded-[12px] border border-[rgba(0,0,0,0.05)] bg-white"
               >
-                <div className="flex items-center justify-end p-2">
+                <div className="flex h-[52px] flex-shrink-0 items-center justify-end border-b border-[var(--color-border-default)] px-3">
                   <button
                     onClick={() => store.selectThread(null)}
-                    className="p-2 rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-hover)] transition-smooth"
+                    className="icon-btn"
+                    aria-label="关闭阅读"
+                    title="关闭阅读"
                   >
                     <X size={18} />
                   </button>
@@ -113,26 +135,39 @@ export function App() {
             </>
           )}
         </AnimatePresence>
-      ) : (
-        <ReadingPanel />
-      )}
 
-      {/* Compose modal */}
-      {store.isComposing && (
-        <ComposeModal initialData={store.composeDraft} />
-      )}
+        {/* Compose modal */}
+        {store.isComposing && (
+          <ComposeModal initialData={store.composeDraft} />
+        )}
 
-      {/* Command palette */}
-      <CommandPalette />
+        {/* Command palette */}
+        <CommandPalette />
 
-      {/* Settings panel */}
-      <SettingsPanel />
+        {/* Settings panel */}
+        <SettingsPanel />
 
-      {/* Account setup */}
-      <AccountSetupModal />
+        {/* Account setup */}
+        <AccountSetupModal />
 
-      {/* Toast container */}
-      <ToastContainer />
-    </div>
+        {/* 应用内确认框：所有删除/清空操作都走这里 */}
+        <ConfirmDialog
+          open={!!store.confirmRequest}
+          title={store.confirmRequest?.title ?? ''}
+          message={store.confirmRequest?.message}
+          okText={store.confirmRequest?.okText}
+          cancelText={store.confirmRequest?.cancelText}
+          pendingText={store.confirmRequest?.pendingText}
+          danger={store.confirmRequest?.danger}
+          pending={store.confirmPending}
+          error={store.confirmError}
+          onConfirm={() => void store.submitConfirm()}
+          onCancel={store.cancelConfirm}
+        />
+
+        {/* Toast container */}
+        <ToastContainer />
+      </div>
+    </MotionConfig>
   );
 }

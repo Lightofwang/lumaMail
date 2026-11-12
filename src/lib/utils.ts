@@ -48,23 +48,6 @@ export function getInitials(name: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
-export function getAvatarGradient(email: string): [string, string] {
-  const gradients: [string, string][] = [
-    ['#6366F1', '#8B5CF6'],
-    ['#EC4899', '#F43F5E'],
-    ['#14B8A6', '#06B6D4'],
-    ['#F97316', '#EAB308'],
-    ['#3B82F6', '#6366F1'],
-    ['#10B981', '#14B8A6'],
-    ['#8B5CF6', '#EC4899'],
-  ];
-  let hash = 0;
-  for (let i = 0; i < email.length; i++) {
-    hash = email.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return gradients[Math.abs(hash) % gradients.length];
-}
-
 export function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').trim();
 }

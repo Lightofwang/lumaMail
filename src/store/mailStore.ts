@@ -16,11 +16,24 @@ import type {
   Toast,
 } from '@/types';
 import { isTauriRuntime, mailApi, toMailApiError } from '@/lib/mailApi';
-import { getAvatarGradient } from '@/lib/utils';
 
 const PAGE_SIZE = 30;
 const STARRED_PATH = '__starred__';
 const DRAFT_THREAD_PREFIX = 'thread-draft-';
+
+/**
+ * 一次确认请求。`action` 在对话框内提交：失败时错误留在框内，用户可以直接重试。
+ * 不传 action 时仅返回 true/false，由调用方自行执行后续操作。
+ */
+export interface ConfirmRequest {
+  title: string;
+  message?: string;
+  okText?: string;
+  cancelText?: string;
+  pendingText?: string;
+  danger?: boolean;
+  action?: () => Promise<void>;
+}
 
 interface MailState {
   // Data — loaded from the Rust backend on startup
@@ -29,6 +42,11 @@ interface MailState {
   threads: Thread[];
   allMessages: Message[];
   drafts: ComposeDraft[];
+
+  // 应用内确认框（替代浏览器原生 confirm/prompt）
+  confirmRequest: ConfirmRequest | null;
+  confirmPending: boolean;
+  confirmError: string | null;
 
   // UI state
   currentAccountId: string;
@@ -78,6 +96,9 @@ interface MailState {
   closeCommandPalette: () => void;
   openAccountForm: () => void;
   closeAccountForm: () => void;
+  requestConfirm: (request: ConfirmRequest) => Promise<boolean>;
+  submitConfirm: () => Promise<void>;
+  cancelConfirm: () => void;
   addToast: (toast: Omit<Toast, 'id'>) => void;
   removeToast: (id: string) => void;
   markThreadRead: (threadId: string) => Promise<void>;
@@ -368,7 +389,6 @@ function adaptAccount(config: AccountConfig): Account {
     id: config.id,
     name: config.displayName || config.email,
     email: config.email,
-    avatarColors: getAvatarGradient(config.email),
     signature: '',
     provider: config.provider,
     imap: config.imap,
@@ -429,6 +449,7 @@ function currentDraftThreads(state: MailState): Thread[] {
 
 let loadSequence = 0;
 let bootstrapPromise: Promise<void> | null = null;
+let confirmResolver: ((ok: boolean) => void) | null = null;
 
 export const useMailStore = create<MailState>((set, get) => ({
   // Data
@@ -450,6 +471,9 @@ export const useMailStore = create<MailState>((set, get) => ({
   isSettingsOpen: false,
   isCommandPaletteOpen: false,
   isAccountFormOpen: false,
+  confirmRequest: null,
+  confirmPending: false,
+  confirmError: null,
   toasts: [],
   isLoading: false,
   isInitialized: false,
@@ -779,6 +803,49 @@ export const useMailStore = create<MailState>((set, get) => ({
   }),
   closeAccountForm: () => set({ isAccountFormOpen: false }),
 
+  requestConfirm: (request) => {
+    // 已有确认框时先以“取消”结束，避免两个 Promise 同时悬挂。
+    const previous = confirmResolver;
+    confirmResolver = null;
+    previous?.(false);
+    return new Promise<boolean>(resolve => {
+      confirmResolver = resolve;
+      set({ confirmRequest: request, confirmPending: false, confirmError: null });
+    });
+  },
+
+  submitConfirm: async () => {
+    const request = get().confirmRequest;
+    if (!request || get().confirmPending) return;
+    // 异步 action 期间可能被新的确认请求顶替：只结算本请求自己的 resolver。
+    const resolver = confirmResolver;
+
+    if (request.action) {
+      set({ confirmPending: true, confirmError: null });
+      try {
+        await request.action();
+      } catch (error) {
+        if (confirmResolver !== resolver) return;
+        const message = error instanceof Error ? error.message : '操作失败，请稍后重试';
+        set({ confirmPending: false, confirmError: message });
+        return;
+      }
+    }
+
+    if (confirmResolver !== resolver) return;
+    resolver?.(true);
+    confirmResolver = null;
+    set({ confirmRequest: null, confirmPending: false, confirmError: null });
+  },
+
+  cancelConfirm: () => {
+    if (get().confirmPending) return;
+    const resolver = confirmResolver;
+    confirmResolver = null;
+    resolver?.(false);
+    set({ confirmRequest: null, confirmPending: false, confirmError: null });
+  },
+
   addToast: (toast) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const newToast = { ...toast, id };
@@ -957,13 +1024,17 @@ export const useMailStore = create<MailState>((set, get) => ({
       }
       // No trash folder on the server: the delete would be permanent, so ask
       // first and send nothing if the user declines.
-      if (!window.confirm(mailError.message)) return;
-      try {
-        await mailApi.deleteMessage(thread.accountId, message.folderPath, message.uid, true);
-        removeFromList(true);
-      } catch (retryError) {
-        get().addToast({ message: toMailApiError(retryError).message, type: 'error' });
-      }
+      await get().requestConfirm({
+        title: '永久删除邮件',
+        message: `服务器没有垃圾箱文件夹，邮件「${message.subject || '(无主题)'}」将被永久删除，无法恢复。`,
+        okText: '永久删除',
+        pendingText: '删除中…',
+        danger: true,
+        action: async () => {
+          await mailApi.deleteMessage(thread.accountId, message.folderPath, message.uid, true);
+          removeFromList(true);
+        },
+      });
     }
   },
 

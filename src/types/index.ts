@@ -25,7 +25,6 @@ export interface Account {
   id: string;
   name: string;
   email: string;
-  avatarColors: [string, string];
   signature: string;
   provider: ProviderId;
   imap: ServerConfig;
