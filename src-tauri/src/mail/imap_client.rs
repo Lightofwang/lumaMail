@@ -10,6 +10,7 @@ use mail_parser::{Address, MessageParser, MimeHeaders};
 use native_tls::{TlsConnector, TlsStream};
 use std::collections::HashMap;
 use std::fs;
+use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 
@@ -56,6 +57,54 @@ fn map_handshake(err: native_tls::HandshakeError<TcpStream>) -> MailError {
     classify_handshake_text(&err.to_string())
 }
 
+/// RFC 2971 ID payload sent after LOGIN.
+const ID_COMMAND: &str =
+    "ID (\"name\" \"Luma Mail\" \"version\" \"0.1.0\" \"vendor\" \"Luma\")";
+
+/// Coremail (163/126/yeah/188) refuses `SELECT` until the client has sent
+/// RFC 2971 `ID` ("Unsafe Login"). Every other provider treats `ID` as
+/// optional, so only these domains get the command.
+///
+/// Matching is on the registrable domain itself or a subdomain of it, so
+/// `imap.163.com` matches while `not163.com` and `163.com.evil.com` do not.
+fn requires_id(host: &str) -> bool {
+    let host = host.trim().trim_end_matches('.').to_ascii_lowercase();
+    const COREMAIL_DOMAINS: [&str; 4] = ["163.com", "126.com", "yeah.net", "188.com"];
+    COREMAIL_DOMAINS.iter().any(|domain| {
+        host == *domain || host.ends_with(&format!(".{domain}"))
+    })
+}
+
+/// Runs the IMAP handshake (greeting + LOGIN) on an already-connected stream.
+/// Split out so tests can replay a server transcript without TLS.
+fn open_session<S: Read + Write>(
+    stream: S,
+    host: &str,
+    username: &str,
+    password: &str,
+) -> Result<imap::Session<S>, MailError> {
+    let client = imap::Client::new(stream);
+    // `login` reads the server greeting as the first untagged line.
+    let mut session = client
+        .login(username, password)
+        .map_err(|(e, _)| MailError::from_imap(&e))?;
+
+    // Only Coremail needs ID; sending it elsewhere is not harmless. imap 2.4
+    // parses tagged responses with imap-proto 0.10, which has no `Response::ID`
+    // variant: an unparsable `* ID (...)` line aborts `read_response` and
+    // leaves the server's tagged OK queued in the stream, so the *next*
+    // command (typically LOGOUT) reads a stale tag and panics on the
+    // `assert_eq!(tag, match_tag)` in `read_response_onto`. QQ/Exmail and
+    // Gmail accept but do not require ID, so they must skip it.
+    if requires_id(host) {
+        // Coremail answers with a plain tagged OK and no untagged `* ID` line,
+        // so the response stream stays in sync here; the result is not needed.
+        let _ = session.run_command_and_read_response(ID_COMMAND);
+    }
+
+    Ok(session)
+}
+
 /// Opens an authenticated IMAP session. IMAP always uses implicit TLS; any
 /// other configuration is rejected instead of silently degrading to plaintext.
 pub fn connect(account: &AccountConfig, password: &str) -> Result<MailSession, MailError> {
@@ -75,19 +124,7 @@ pub fn connect(account: &AccountConfig, password: &str) -> Result<MailSession, M
         .connect(&account.imap.host, tcp)
         .map_err(map_handshake)?;
 
-    let client = imap::Client::new(tls);
-    let mut session = client
-        .login(&account.username, password)
-        .map_err(|(e, _)| MailError::from_imap(&e))?;
-
-    // RFC 2971 ID. Servers that do not implement ID answer BAD/NO; that is not
-    // fatal for the session. Some Chinese providers (126/163) are friendlier
-    // when a client identifies itself.
-    let _ = session.run_command_and_read_response(
-        "ID (\"name\" \"Luma Mail\" \"version\" \"0.1.0\" \"vendor\" \"Luma\")",
-    );
-
-    Ok(session)
+    open_session(tls, &account.imap.host, &account.username, password)
 }
 
 pub fn close(mut session: MailSession) {
@@ -855,6 +892,8 @@ mod tests {
     use super::*;
     use crate::mail::error::MailErrorCode;
     use crate::mail::models::ServerConfig;
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     fn gmail_account() -> AccountConfig {
         AccountConfig {
@@ -914,6 +953,109 @@ mod tests {
             .expect("login must fail");
         assert_eq!(err.code, MailErrorCode::AuthFailed, "detail: {:?}", err);
         assert!(err.message.contains("不正确"), "detail: {:?}", err);
+    }
+
+    #[test]
+    fn coremail_domains_require_id() {
+        for host in [
+            "163.com",
+            "126.com",
+            "yeah.net",
+            "188.com",
+            "imap.163.com",
+            " IMAP.126.COM. ",
+            "mail.yeah.net",
+            "smtp.188.com",
+        ] {
+            assert!(requires_id(host), "{host} should require ID");
+        }
+    }
+
+    #[test]
+    fn non_coremail_hosts_skip_id() {
+        for host in [
+            "imap.exmail.qq.com",
+            "imap.qq.com",
+            "imap.gmail.com",
+            "not163.com",
+            "163.com.evil.com",
+            "163.com.cn",
+            "mail.example.com",
+            "",
+        ] {
+            assert!(!requires_id(host), "{host} must not require ID");
+        }
+    }
+
+    /// Replays a canned server transcript and records every byte the client
+    /// writes, so command order and tag sync can be asserted without a socket.
+    struct MockStream {
+        server: &'static [u8],
+        pos: usize,
+        written: Rc<RefCell<Vec<u8>>>,
+    }
+
+    impl Read for MockStream {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let rest = &self.server[self.pos..];
+            if rest.is_empty() {
+                return Ok(0);
+            }
+            let len = rest.len().min(buf.len());
+            buf[..len].copy_from_slice(&rest[..len]);
+            self.pos += len;
+            Ok(len)
+        }
+    }
+
+    impl Write for MockStream {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.written.borrow_mut().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn exmail_login_skips_id_and_logout_stays_in_sync() {
+        // Exmail's greeting advertises ID, but the command is optional there.
+        // With ID sent, imap 2.4 leaves the ID's tagged OK unread and LOGOUT
+        // panics on a tag mismatch (a2 vs a3).
+        const EXMAIL: &[u8] = concat!(
+            "* OK [CAPABILITY IMAP4 IMAP4rev1 ID MOVE] QQMail IMAP4Server ready\r\n",
+            "a1 OK LOGIN completed\r\n",
+            "* BYE QQMail IMAP4Server logging out\r\n",
+            "a2 OK LOGOUT completed\r\n",
+        )
+        .as_bytes();
+
+        let written = Rc::new(RefCell::new(Vec::new()));
+        let stream = MockStream {
+            server: EXMAIL,
+            pos: 0,
+            written: Rc::clone(&written),
+        };
+
+        let mut session = open_session(
+            stream,
+            "imap.exmail.qq.com",
+            "luma.test.invalid@exmail.qq.com",
+            "secret",
+        )
+        .expect("login against the replayed transcript must succeed");
+        // The old code panicked here: LOGOUT read the leftover `a2 OK` from ID.
+        session.logout().expect("logout must stay in sync");
+
+        let commands = String::from_utf8(written.borrow().clone()).expect("commands are ASCII");
+        assert!(commands.contains("a1 LOGIN"), "commands: {commands}");
+        assert!(commands.contains("a2 LOGOUT"), "commands: {commands}");
+        assert!(
+            !commands.contains(" ID "),
+            "Exmail must not receive an ID command: {commands}"
+        );
     }
 
     #[test]
