@@ -2,13 +2,15 @@ use crate::mail::credentials;
 use crate::mail::error::MailError;
 use crate::mail::imap_client::{self, STARRED_FOLDER};
 use crate::mail::models::{
-    AccountConfig, AccountTestResult, AttachmentPath, FolderInfo, MailDetail, MessagePage,
-    SendRequest,
+    AccountConfig, AccountTestResult, AttachmentPath, FolderInfo, MailDetail, MailSummary,
+    MessagePage, SendRequest,
 };
 use crate::mail::smtp_client;
 use crate::mail::store;
+use serde::Serialize;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager};
 
 async fn blocking<T, F>(f: F) -> Result<T, MailError>
@@ -176,9 +178,21 @@ pub async fn folder_list(app: AppHandle, account_id: String) -> Result<Vec<Folde
             imap_client::close(session);
             folders
         })();
-        result.map_err(|e| e.redact(&password))
+        result.map_err(|e| e.with_stage("加载文件夹").redact(&password))
     })
     .await
+}
+
+/// One streamed slice of `message_list`. The first chunk lets the UI replace
+/// the skeleton; later chunks append. `done` marks a single-shot result (the
+/// starred path) so the caller knows no further chunks follow.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MessageListChunk {
+    pub items: Vec<MailSummary>,
+    pub total: u32,
+    pub has_more: bool,
+    pub done: bool,
 }
 
 #[tauri::command]
@@ -188,6 +202,7 @@ pub async fn message_list(
     folder: String,
     page: u32,
     page_size: u32,
+    on_chunk: Channel<MessageListChunk>,
 ) -> Result<MessagePage, MailError> {
     blocking(move || {
         let account = store::find_account(&app, &account_id)?;
@@ -195,15 +210,50 @@ pub async fn message_list(
         let result = (|| {
             let mut session = imap_client::connect(&account, &password)?;
             let page = if folder == STARRED_FOLDER {
-                let folders = imap_client::list_folders(&mut session)?;
-                imap_client::list_starred(&mut session, &folders, page, page_size)
+                let folders = imap_client::list_folders_basic(&mut session)?;
+                let page = imap_client::list_starred(
+                    &mut session,
+                    &folders,
+                    page,
+                    page_size,
+                    // The scan can hit the same malformed FETCH as the inbox;
+                    // a fresh session is needed to resync after a parse error.
+                    || imap_client::connect(&account, &password),
+                );
+                if let Ok(page) = &page {
+                    let _ = on_chunk.send(MessageListChunk {
+                        items: page.items.clone(),
+                        total: page.total,
+                        has_more: page.has_more,
+                        done: true,
+                    });
+                }
+                page
             } else {
-                imap_client::list_messages(&mut session, &folder, page, page_size)
+                imap_client::list_messages_streamed(
+                    &mut session,
+                    &folder,
+                    page,
+                    page_size,
+                    // A failed FETCH can leave its tagged response unread; the
+                    // retry and per-mail isolation need a fresh session.
+                    || imap_client::connect(&account, &password),
+                    |items, total| {
+                        // A dropped receiver only means the window went away;
+                        // the command still returns the full page.
+                        let _ = on_chunk.send(MessageListChunk {
+                            items,
+                            total,
+                            has_more: false,
+                            done: false,
+                        });
+                    },
+                )
             };
             imap_client::close(session);
             page
         })();
-        result.map_err(|e| e.redact(&password))
+        result.map_err(|e| e.with_stage("加载邮件").redact(&password))
     })
     .await
 }
@@ -300,7 +350,7 @@ pub async fn message_delete(
         let password = credentials::get_password(&account_id)?;
         let result = (|| {
             let mut session = imap_client::connect(&account, &password)?;
-            let folders = imap_client::list_folders(&mut session)?;
+            let folders = imap_client::list_folders_basic(&mut session)?;
             let deleted = imap_client::delete_message(&mut session, &folders, &folder, uid, permanent);
             imap_client::close(session);
             deleted
@@ -327,7 +377,7 @@ pub async fn message_send(
             // folder would show duplicates.
             if account.provider == "custom" {
                 if let Ok(mut session) = imap_client::connect(&account, &password) {
-                    if let Ok(folders) = imap_client::list_folders(&mut session) {
+                    if let Ok(folders) = imap_client::list_folders_basic(&mut session) {
                         let _ = imap_client::append_sent(&mut session, &folders, &raw);
                     }
                     imap_client::close(session);

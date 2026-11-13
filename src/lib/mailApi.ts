@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { Channel, invoke } from '@tauri-apps/api/core';
 import type {
   AccountConfig,
   AccountTestResult,
@@ -7,6 +7,7 @@ import type {
   MailDetail,
   MailErrorCode,
   MailErrorPayload,
+  MessageListChunk,
   MessagePage,
   SendRequest,
 } from '@/types';
@@ -70,12 +71,51 @@ export function toMailApiError(error: unknown): MailApiError {
   return new MailApiError('UNKNOWN', CODE_MESSAGES.UNKNOWN);
 }
 
+// Only read queries are bounded. Mutating commands (message_send,
+// attachment_save, account_test, …) must never be reported as failed after the
+// server already applied them, otherwise the user retries and duplicates mail.
+const READ_TIMEOUT_MS: Record<string, number> = {
+  folder_list: 60_000,
+  message_list: 120_000,
+  message_get: 60_000,
+};
+
+/**
+ * Bounds how long the UI waits for a backend read query. The invoke promise may
+ * still resolve later; the race result is discarded. `message_list` also keeps
+ * streaming chunks on its channel after the timeout, so the caller must
+ * invalidate its in-flight sequence when this rejects.
+ */
+async function withTimeout<T>(timeoutMs: number, promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(
+            new MailApiError(
+              'TIMEOUT',
+              '加载超时：邮件服务器响应过慢，请点击重试',
+              `请求超过 ${timeoutMs / 1000} 秒未返回`,
+            ),
+          );
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (!isTauriRuntime()) {
     throw new MailApiError('UNKNOWN', '请在 Luma Mail 桌面应用中使用邮箱功能');
   }
   try {
-    return await invoke<T>(command, args);
+    const pending = invoke<T>(command, args);
+    const timeoutMs = READ_TIMEOUT_MS[command];
+    return await (timeoutMs === undefined ? pending : withTimeout(timeoutMs, pending));
   } catch (error) {
     throw toMailApiError(error);
   }
@@ -96,8 +136,26 @@ export const mailApi = {
   listFolders: (accountId: string) =>
     call<FolderInfo[]>('folder_list', { accountId }),
 
-  listMessages: (accountId: string, folder: string, page: number, pageSize: number) =>
-    call<MessagePage>('message_list', { accountId, folder, page, pageSize }),
+  listMessages: (
+    accountId: string,
+    folder: string,
+    page: number,
+    pageSize: number,
+    onChunk?: (chunk: MessageListChunk) => void,
+  ) => {
+    // The backend streams each FETCH batch on this channel, so the list can
+    // render before the whole page has arrived. The command's return value is
+    // still the authoritative page (total/hasMore).
+    const channel = new Channel<MessageListChunk>();
+    if (onChunk) channel.onmessage = onChunk;
+    return call<MessagePage>('message_list', {
+      accountId,
+      folder,
+      page,
+      pageSize,
+      onChunk: channel,
+    });
+  },
 
   getMessage: (accountId: string, folder: string, uid: number) =>
     call<MailDetail>('message_get', { accountId, folder, uid }),

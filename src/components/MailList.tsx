@@ -95,7 +95,11 @@ export function MailList() {
         ) : showFullLoading ? (
           <ListSkeleton rowHeight={rowHeight} />
         ) : showFullError ? (
-          <ErrorState message={store.folderError ?? '加载失败'} onRetry={() => void store.refreshFolders()} />
+          <ErrorState
+            message={store.folderError ?? '加载失败'}
+            detail={store.folderErrorDetail}
+            onRetry={() => store.retryCurrentView()}
+          />
         ) : threads.length === 0 ? (
           <EmptyState query={store.searchQuery} folderName={currentFolder?.name} />
         ) : (
@@ -127,14 +131,21 @@ export function MailList() {
               </div>
             )}
             {!store.loadingMore && store.folderError && (
-              <div className="flex items-center justify-center gap-2 py-3 text-[12px]">
-                <span className="text-[var(--color-danger)]">{store.folderError}</span>
-                <button
-                  onClick={() => void store.loadMoreMessages()}
-                  className="btn btn-link h-7 px-1.5 text-[12px]"
-                >
-                  重试
-                </button>
+              <div className="flex flex-col items-center justify-center gap-1 py-3 text-[12px]">
+                <div className="flex items-center gap-2">
+                  <span className="text-[var(--color-danger)]">{store.folderError}</span>
+                  <button
+                    onClick={() => store.retryCurrentView()}
+                    className="btn btn-link h-7 px-1.5 text-[12px]"
+                  >
+                    重试
+                  </button>
+                </div>
+                {store.folderErrorDetail && (
+                  <p className="max-h-24 w-full overflow-y-auto whitespace-pre-wrap break-all px-3 font-mono text-[11px] leading-4 text-[var(--color-danger)] opacity-70 select-all">
+                    {store.folderErrorDetail}
+                  </p>
+                )}
               </div>
             )}
             {!store.hasMore && threads.length > 0 && (
@@ -368,7 +379,9 @@ function NoAccountState() {
   );
 }
 
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+function ErrorState({ message, detail, onRetry }: {
+  message: string; detail?: string | null; onRetry: () => void;
+}) {
   return (
     <div className="flex h-full items-center justify-center p-4">
       <div className="w-full max-w-[320px] rounded-[12px] bg-[var(--color-danger-soft)] px-4 py-4">
@@ -379,6 +392,11 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
             <p className="mt-1 break-words text-[12px] leading-5 text-[var(--color-danger)]">
               {message}
             </p>
+            {detail && (
+              <p className="mt-2 max-h-24 overflow-y-auto whitespace-pre-wrap break-all font-mono text-[11px] leading-4 text-[var(--color-danger)] opacity-70 select-all">
+                {detail}
+              </p>
+            )}
           </div>
         </div>
         <button

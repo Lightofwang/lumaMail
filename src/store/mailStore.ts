@@ -66,6 +66,7 @@ interface MailState {
   folderLoading: boolean;
   loadingMore: boolean;
   folderError: string | null;
+  folderErrorDetail: string | null;
   page: number;
   hasMore: boolean;
 
@@ -79,6 +80,7 @@ interface MailState {
   refreshFolders: () => Promise<void>;
   loadMessages: (reset?: boolean) => Promise<void>;
   loadMoreMessages: () => Promise<void>;
+  retryCurrentView: () => void;
   loadThreadDetail: (threadId: string) => Promise<void>;
   retryThreadDetail: (threadId: string) => void;
   saveAttachment: (thread: Thread, attachment: Attachment) => Promise<void>;
@@ -480,6 +482,7 @@ export const useMailStore = create<MailState>((set, get) => ({
   folderLoading: false,
   loadingMore: false,
   folderError: null,
+  folderErrorDetail: null,
   page: 0,
   hasMore: true,
 
@@ -501,6 +504,10 @@ export const useMailStore = create<MailState>((set, get) => ({
         const configs = await mailApi.listAccounts();
         const accounts = configs.map(adaptAccount);
         set({ accounts });
+        // Let the shell paint before the first folder sync: on a slow IMAP
+        // server setCurrentAccount can take tens of seconds, and the full-screen
+        // skeleton would otherwise hide the UI the whole time.
+        set({ isLoading: false, isInitialized: true });
 
         const preferred = accounts.find(a => a.id === persisted.selectedAccountId);
         const target = preferred ?? accounts[0];
@@ -554,7 +561,9 @@ export const useMailStore = create<MailState>((set, get) => ({
       threads: [],
       allMessages: [],
       folderError: null,
+      folderErrorDetail: null,
     });
+    loadSequence += 1;
     if (remaining[0]) {
       await get().setCurrentAccount(remaining[0].id);
     } else {
@@ -575,6 +584,7 @@ export const useMailStore = create<MailState>((set, get) => ({
         folders,
         currentFolderId: stillExists ? get().currentFolderId : '',
         folderError: null,
+        folderErrorDetail: null,
       });
       if (!stillExists) {
         const defaultFolder = folders.find(f => f.type === 'inbox') ?? folders[0];
@@ -585,7 +595,7 @@ export const useMailStore = create<MailState>((set, get) => ({
     } catch (error) {
       const mailError = toMailApiError(error);
       if (get().currentAccountId !== accountId) return;
-      set({ folderError: mailError.message });
+      set({ folderError: mailError.message, folderErrorDetail: mailError.detail ?? null });
       get().addToast({ message: mailError.message, type: 'error' });
     }
   },
@@ -597,7 +607,7 @@ export const useMailStore = create<MailState>((set, get) => ({
     if (!currentAccountId || !folder) return;
 
     const nextPage = reset ? 1 : state.page + 1;
-    if (!reset && (!state.hasMore || state.loadingMore)) return;
+    if (!reset && (state.folderLoading || !state.hasMore || state.loadingMore)) return;
 
     const sequence = reset ? ++loadSequence : loadSequence;
     set({
@@ -611,39 +621,96 @@ export const useMailStore = create<MailState>((set, get) => ({
             page: 0,
             hasMore: true,
             folderError: null,
+            folderErrorDetail: null,
           }
         : {}),
     });
 
     try {
-      const result = await mailApi.listMessages(currentAccountId, folder.path, nextPage, PAGE_SIZE);
+      let firstChunk = true;
+      let receivedChunk = false;
+
+      // Each streamed batch is applied immediately so the skeleton goes away
+      // on the first rows instead of waiting for the slowest FETCH.
+      const applyChunk = (items: MailSummary[]) => {
+        const adapted = items.map(item => adaptSummary(item, currentAccountId, folder));
+        const current = get();
+        const existing = new Set(current.threads.map(thread => thread.id));
+        const appended = adapted.filter(thread => !existing.has(thread.id));
+        const threads = firstChunk && reset ? adapted : [...current.threads, ...appended];
+        firstChunk = false;
+        set({ threads, allMessages: collectMessages(threads), folderLoading: false });
+      };
+
+      const result = await mailApi.listMessages(
+        currentAccountId,
+        folder.path,
+        nextPage,
+        PAGE_SIZE,
+        chunk => {
+          // The chunk's state checks mirror the post-await guard so a response
+          // from a previous folder/account can never leak into the list.
+          if (get().currentAccountId !== currentAccountId || sequence !== loadSequence) return;
+          receivedChunk = true;
+          applyChunk(chunk.items);
+        },
+      );
       if (get().currentAccountId !== currentAccountId || sequence !== loadSequence) return;
 
+      // The channel can deliver a prefix and then stop (window gone, timeout)
+      // while the command still returns the authoritative page. Rebuild from
+      // that page so skipped rows are backfilled exactly once, in page order.
       const adapted = result.items.map(item => adaptSummary(item, currentAccountId, folder));
       const current = get();
-      const existing = new Set(current.threads.map(thread => thread.id));
-      const appended = reset
-        ? adapted
-        : adapted.filter(thread => !existing.has(thread.id));
-      const threads = reset ? adapted : [...current.threads, ...appended];
+      const existing = new Map(current.threads.map(thread => [thread.id, thread]));
+      const pageIds = new Set(adapted.map(thread => thread.id));
+      const threads = reset
+        ? [
+            ...adapted.map(thread => existing.get(thread.id) ?? thread),
+            ...current.threads.filter(thread => !pageIds.has(thread.id)),
+          ]
+        : [...current.threads, ...adapted.filter(thread => !existing.has(thread.id))];
+      if (reset || !receivedChunk || threads.length !== current.threads.length) {
+        set({ threads, allMessages: collectMessages(threads) });
+      }
+
       set({
-        threads,
-        allMessages: collectMessages(threads),
         page: nextPage,
         hasMore: result.hasMore,
         folderLoading: false,
         loadingMore: false,
         folderError: null,
+        folderErrorDetail: null,
       });
     } catch (error) {
       if (get().currentAccountId !== currentAccountId || sequence !== loadSequence) return;
+      // A timed-out command can still stream chunks; bumping the sequence makes
+      // those late writes no-ops instead of reviving a failed page.
+      loadSequence += 1;
       const mailError = toMailApiError(error);
-      set({ folderLoading: false, loadingMore: false, folderError: mailError.message });
+      set({
+        folderLoading: false,
+        loadingMore: false,
+        folderError: mailError.message,
+        folderErrorDetail: mailError.detail ?? null,
+      });
     }
   },
 
   loadMoreMessages: async () => {
     await get().loadMessages(false);
+  },
+
+  retryCurrentView: () => {
+    const state = get();
+    if (state.folderLoading || state.loadingMore) return;
+    // A failed page leaves the folder in place, so refreshing folders would
+    // clear the error without ever retrying the fetch. Reload the open folder.
+    if (state.currentFolderId && state.folders.some(f => f.id === state.currentFolderId)) {
+      void get().loadMessages(true);
+    } else {
+      void get().refreshFolders();
+    }
   },
 
   loadThreadDetail: async (threadIdValue) => {
@@ -713,6 +780,8 @@ export const useMailStore = create<MailState>((set, get) => ({
 
   setCurrentAccount: async (accountId) => {
     if (!get().accounts.some(a => a.id === accountId)) return;
+    // Invalidate in-flight list loads for the previous account.
+    loadSequence += 1;
 
     set({
       currentAccountId: accountId,
@@ -726,6 +795,8 @@ export const useMailStore = create<MailState>((set, get) => ({
       page: 0,
       hasMore: true,
       folderError: null,
+      folderErrorDetail: null,
+      folderLoading: true,
     });
     persistFullState(get());
 
@@ -737,11 +808,18 @@ export const useMailStore = create<MailState>((set, get) => ({
       const defaultFolder = folders.find(f => f.type === 'inbox') ?? folders[0];
       if (defaultFolder) {
         await get().setCurrentFolder(defaultFolder.id);
+      } else {
+        // No mailbox to open; stop the list skeleton instead of leaving it on.
+        set({ folderLoading: false });
       }
     } catch (error) {
       const mailError = toMailApiError(error);
       if (get().currentAccountId !== accountId) return;
-      set({ folderError: mailError.message });
+      set({
+        folderLoading: false,
+        folderError: mailError.message,
+        folderErrorDetail: mailError.detail ?? null,
+      });
       get().addToast({ message: mailError.message, type: 'error' });
     }
   },
@@ -759,6 +837,7 @@ export const useMailStore = create<MailState>((set, get) => ({
       page: 0,
       hasMore: true,
       folderError: null,
+      folderErrorDetail: null,
       folderLoading: true,
     });
     await get().loadMessages(true);
@@ -1146,6 +1225,7 @@ export const useMailStore = create<MailState>((set, get) => ({
       folderLoading: false,
       loadingMore: false,
       folderError: null,
+      folderErrorDetail: null,
       page: 0,
       hasMore: true,
       settings: { density: 'comfortable', fontSize: 14 },

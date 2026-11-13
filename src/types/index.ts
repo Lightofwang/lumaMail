@@ -176,6 +176,14 @@ export interface MessagePage {
   hasMore: boolean;
 }
 
+/** One streamed slice of a message page (see the `message_list` channel). */
+export interface MessageListChunk {
+  items: MailSummary[];
+  total: number;
+  hasMore: boolean;
+  done: boolean;
+}
+
 export interface AccountTestResult {
   imap: boolean;
   smtp: boolean;
